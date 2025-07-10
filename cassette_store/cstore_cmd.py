@@ -115,10 +115,7 @@ def _cstore_save(handler, args):
     with handler(args.input, 'r') as cstore:
         # Get the raw data as a bytearray, stop at the first EOF (0xff)
         data = deque()
-        for b in cstore.bytes:
-            if b == 0xff:
-                break
-            data.append(b)
+        data.extend(cstore.bytes)
         data = bytearray(data)
 
         if args.output is None:

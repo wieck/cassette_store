@@ -98,8 +98,8 @@ class CStoreBase:
             self.soxpipe = io.BufferedReader(self.soxproc.stdout)
 
             # Create the generators for sign-bit-change and bytes
-            self.sbc    = self._sbc_gen()
-            self.bytes  = self._bytes_gen()
+            self.sbc = self._sbc_gen()
+            self.all_bytes = self._bytes_gen()
         elif mode == 'w':
             # This is 'load' mode, writing to the calculator or a sound-file
             if fname is None:

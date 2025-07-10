@@ -43,6 +43,14 @@ class CStoreCasioFX502P(CStoreBase):
             if not self._wait_for_leadin(0.5):
                 raise CStoreException("no lead-in found")
 
+            self.bytes = self.bytes_until_eof()
+
+    def bytes_until_eof(self):
+        for b in self.all_bytes:
+            if b == 0xff:
+                break
+            yield b
+
     def write(self, data):
         # Write the lead-in
         self._write_ones(4.0)
