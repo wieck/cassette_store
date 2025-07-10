@@ -21,11 +21,6 @@ from cassette_store.cstore_base import *
 # ----
 class CStoreCasioFX502P(CStoreBase):
     def __init__(self, fname = None, mode = 'r', gain = None):
-        self.baud   = 300
-        self.freq0  = 1200
-        self.freq1  = 2400
-        self.parity = CSTORE_PARITY_EVEN
-
         # Build the text->byte token table by reversing the byte->text one
         self.TOKENS_T2B = {self.TOKENS_B2T[b].upper(): b
                            for b in self.TOKENS_B2T}
