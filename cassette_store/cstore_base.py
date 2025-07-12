@@ -6,6 +6,7 @@
 # ----
 import io
 import subprocess
+import sys
 from collections import deque
 from itertools import islice
 
@@ -37,23 +38,17 @@ class CStoreException(Exception):
 #   Base class of the cassette_store module.
 # ----
 class CStoreBase:
-    def __init__(self, fname, mode, gain, sinc, baud, freq0, freq1, parity,
-                 databits, stopbits):
+    def __init__(self, fname, mode, gain, sinc, basefreq, baud,
+                 databits, parity, stopbits):
         self.fname      = fname
         self.mode       = mode
         self.gain       = gain
         self.sinc       = sinc
+        self.origfreq   = basefreq
         self.baud       = baud
-        self.freq0      = freq0
-        self.freq1      = freq1
-        self.parity     = parity
         self.databits   = databits
+        self.parity     = parity
         self.stopbits   = stopbits
-
-        # Generate frame arrays for zero and one bits
-        fphw = int(CSTORE_SOX_RATE / self.freq1 / 2)
-        self.frames0 = ([0x80] * fphw * 2 + [0x00] * fphw * 2) * 4
-        self.frames1 = ([0x80] * fphw + [0x00] * fphw) * 8
 
         # Determine the used bitmasks from the number of databits and parity
         self.bitmasks = [1 << n for n in range(0, self.databits)]
@@ -97,9 +92,22 @@ class CStoreBase:
                                             text = False)
             self.soxpipe = io.BufferedReader(self.soxproc.stdout)
 
-            # Create the generators for sign-bit-change and bytes
-            self.sbc = self._sbc_gen()
-            self.all_bytes = self._bytes_gen()
+            # Create the generator for sign-bit-changes
+            self.sbc    = self._sbc_generator()
+
+            # Wait for the lead-in and determine the actual basefreq from that
+            self._wait_for_leadin(basefreq, 0.5)
+
+            # From the basefreq we can calculate the midpoint between
+            # number of samples for a basefreq halfwave and those for
+            # a basefreq/2 (zero bit) halfwave.
+            self.hwmidpoint = int(CSTORE_SOX_RATE / (self.basefreq * 1.5)
+                                  + 0.5)
+
+            # Create all the generators needed
+            self.hw         = self._hw_generator()
+            self.bits       = self._bit_generator()
+            self.allbytes   = self._byte_generator()
         elif mode == 'w':
             # This is 'load' mode, writing to the calculator or a sound-file
             if fname is None:
@@ -154,8 +162,8 @@ class CStoreBase:
     # audio signal's amplitude flips from positive to negative or vice versa,
     # emit a 1. Otherwise emit a 0. This lets higher functions determine
     # the current frequency.
-    def _sbc_gen(self):
-        prev_sign = 0
+    def _sbc_generator(self):
+        last_sign = 0
 
         while True:
             frames = self.soxpipe.read(8192)
@@ -166,82 +174,101 @@ class CStoreBase:
 
             for byte in sbytes:
                 sign = byte & 0x80
-                yield 1 if (sign != prev_sign) else 0
-                prev_sign = sign
+                yield 1 if (sign != last_sign) else 0
+                last_sign = sign
 
-    # Generator emitting a sequence of bytes as decoded from the above
-    # sign-bit-change stream. 
-    def _bytes_gen(self):
-        sample_size = int(CSTORE_SOX_RATE / self.real_baud)
-        stop_skip   = int(self.stopbits * sample_size -
-                          CSTORE_SOX_RATE / self.real_freq1)
-        sbc_per_0   = int(self.freq0 / self.baud * 2)
-        sbc_per_1   = int(self.freq1 / self.baud * 2)
-        sbc_cmp     = int((sbc_per_0 + sbc_per_1) / 2)
+    # Generator emitting a '#' for a ZERO frequency halfwave and a '.' for
+    # a ONE frequency halfwave. The _bit_generator() is using this to output
+    # a bit stream.
+    def _hw_generator(self):
+        n = 0
+        for s in self.sbc:
+            n += 1
+            if s != 0 and n > 2:
+                yield '.' if n <= self.hwmidpoint else '#'
+                n = 0
 
-        sbc = self.sbc
+    # Generate a stream of decoded bits
+    def _bit_generator(self):
+        # From the originally requested basefreq and the baud we can
+        # determine the lengths of the zero and one patterns.
+        len_1 = int(self.origfreq / self.baud * 2)
+        len_0 = int(len_1 / 2)
+        pattern_1 = '.' * len_1
+        pattern_0 = '#' * len_0
 
-        # We keep a sample buffer the size of audio frames in one bit.
-        # Note that the frequencies may have been adjusted after waiting
-        # for the lead-in for better alignment with bit-boundaries.
-        sample = deque(maxlen = sample_size)
-        sample.extend([0] * sample_size)
-        sign_changes = 0
+        # Scan the incoming halfwaves for those patterns
+        sample = deque(maxlen = len_1)
+        sample.extend(islice(self.hw, len_1 - 1))
 
-        for val in sbc:
-            # Look for the start bit
-            if val:
-                sign_changes += 1
-            if sample.popleft():
-                sign_changes -= 1
-            sample.append(val)
+        for hw in self.hw:
+            sample.append(hw)
+            if ''.join(sample)[0:len_0] == pattern_0:
+                # Got a ZERO pattern
+                yield 0
+                sample.extend(islice(self.hw, len_0 - 1))
+            elif ''.join(sample) == pattern_1:
+                # Got a ONE pattern
+                yield 1
+                sample.extend(islice(self.hw, len_1 - 1))
 
-            # A start bit (zero) is a sample buffer that has a leading
-            # sign-bit-change and approximately the number of sign bit
-            # changes to make a zero bit.
-            if sample[0] == 1 and sign_changes <= (sbc_per_0 + 1):
-                byte = 0
-                none = 0
-                # Decode the protocol specific number of databits
-                for mask in self.bitmasks:
-                    if sum(islice(sbc, sample_size)) >= sbc_cmp:
-                        byte |= mask
-                        none += 1
-                    # If there is a parity bit, check it
-                    if mask == 0x00:
-                        if none % 2 != self.parity:
-                            raise Exception('parity error')
-                # if we have stopbits, skip some (but not all) of the
-                # one-frequency cycles.
-                if stop_skip > 0 and False:
-                    sample.extend(islice(sbc, stop_skip))
-                else:
-                    sample.extend([0x00] * sample_size)
-                sign_changes = sum(sample)
+    # Generate a stream of decoded bytes
+    def _byte_generator(self):
+        # Calculate the number of meaningful bits (without stopbits)
+        numbits = 1 + self.databits
+        if self.parity != CSTORE_PARITY_NONE:
+            numbits += 1
 
-                # We got one byte!
-                yield byte
+        # Setup a sample buffer including the stopbits
+        sample = deque(maxlen = numbits + self.stopbits)
+        sample.extend(islice(self.bits, numbits + self.stopbits - 1))
 
-    # Almost all of these protocols start with a steady frequency of the
-    # one-bit. In order to not get confused by noise at the beginning of
-    # old recordings we can wait for that "carrier" signal.
-    def _wait_for_leadin(self, duration = 0.5):
+        # Now process bits into bytes
+        for b in self.bits:
+            # First we scan for a ZERO startbit
+            sample.append(b)
+            if sample[0] == 0:
+                # Got the startbit, now we consume the requested number of
+                # databits and parity. Count ONES while doing so.
+                byteval = 0
+                i = 1
+                nones = 0
+                for m in self.bitmasks:
+                    if m != 0:
+                        # This is a data bit, if set add it to the byteval.
+                        if sample[i]:
+                            byteval |= m
+                            nones += 1
+                    else:
+                        # This is the parity bit, check it. Note: the
+                        # class initialization adds a zero mask to the
+                        # bitmasks if there is a parity.
+                        if sample[i] != (nones + self.parity) % 2:
+                            raise CStoreException("parity error")
+                    i += 1
+                # Skip ahead on the input bits so that the stopbits are
+                # next in the sample processing.
+                sample.extend(islice(self.bits, numbits - 1))
+
+                # Return the byte we just produced.
+                yield byteval
+
+    def _wait_for_leadin(self, basefreq, duration = 0.5):
         # We create a sample buffer the size of number of audio frames
         # for the requested duration of the carrier signal.
         sample_size = int(CSTORE_SOX_RATE * duration)
         sample = deque(maxlen = sample_size)
         sample.extend(islice(self.sbc, sample_size - 1))
 
-        # We then scan for a steady signal of the one-bit frequency
+        # We then scan for a steady signal of the one-bit frequency.
+        # Doesn't have to be 100% accurate
         for val in self.sbc:
             sample.append(val)
-            if abs(sum(sample) - int(self.freq1 * duration * 2)) < 100:
-                # We found the carrier wave. This also gives us the oppotunity
-                # to fine tune the actual frequencies and baud-rate to what
-                # the calculator is sending.
-                self.real_freq1 = int(sum(sample) / duration / 2)
-                self.real_freq0 = int(self.freq0 * self.real_freq1 / self.freq1)
-                self.real_baud  = int(self.baud / self.freq1 * self.real_freq1)
+            if abs(sum(sample) - int(basefreq * duration * 2)) < basefreq / 25:
+                # We found the carrier wave. Advance 0.2 seconds further to
+                # eliminate any early junk, then measure the actual basefreq.
+                sample.extend(islice(self.sbc, int(CSTORE_SOX_RATE / 5 - 1)))
+                self.basefreq = int(sum(sample) / duration / 2)
                 return True
 
             # If not found yet we just move ahead by 100ms so we don't

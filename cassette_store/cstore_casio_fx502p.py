@@ -20,7 +20,7 @@ from cassette_store.cstore_base import *
 #   one-stopbits.
 # ----
 class CStoreCasioFX502P(CStoreBase):
-    def __init__(self, fname = None, mode = 'r', gain = None):
+    def __init__(self, fname = None, mode = 'r', gain = None, sinc = None):
         # Build the text->byte token table by reversing the byte->text one
         self.TOKENS_T2B = {self.TOKENS_B2T[b].upper(): b
                            for b in self.TOKENS_B2T}
@@ -29,24 +29,20 @@ class CStoreCasioFX502P(CStoreBase):
         super().__init__(fname, 
                          mode       = mode,
                          gain       = gain,
-                         sinc       = '1000-2600',
+                         sinc       = sinc,
+                         basefreq   = 2400,
                          baud       = 300,
-                         freq0      = 1200,
-                         freq1      = 2400,
-                         parity     = CSTORE_PARITY_EVEN,
                          databits   = 8,
+                         parity     = CSTORE_PARITY_EVEN,
                          stopbits   = 2)
 
         # If we are reading data (save mode), wait for a lead-in of
         # continuous 1-bits at least 0.5 seconds long
         if mode == 'r':
-            if not self._wait_for_leadin(0.5):
-                raise CStoreException("no lead-in found")
-
             self.bytes = self.bytes_until_eof()
 
     def bytes_until_eof(self):
-        for b in self.all_bytes:
+        for b in self.allbytes:
             if b == 0xff:
                 break
             yield b
@@ -117,8 +113,8 @@ class CStoreCasioFX502P(CStoreBase):
                     output = output + mem + ': ' + outnum + '\n'
         else:
             # Didn't recognize what this byte stream means.
-            raise CStoreException("unrecognized FX502P data header '{0}'",
-                                  start)
+            raise CStoreException(
+                    "unrecognized FX502P data header '{0}'".format(start))
             
         return output + '\n'
 

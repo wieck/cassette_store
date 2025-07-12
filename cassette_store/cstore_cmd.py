@@ -36,6 +36,8 @@ def main():
                         help = 'read/write binary data')
     parser.add_argument('--gain', default = None, type = int,
                         help = 'apply GAIN db')
+    parser.add_argument('--sinc', default = None,
+                        help = 'apply SINC bandpass filter')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -72,6 +74,8 @@ def cstore_analyze():
                         help = 'read audio from INPUT (soundcard)')
     parser.add_argument('--gain', default = None, type = int,
                         help = 'apply GAIN db')
+    parser.add_argument('--sinc', default = None,
+                        help = 'apply SINC bandpass filter')
     parser.add_argument('--skip', default = 0.0, type = float,
                         help = 'skip over SKIP seconds of noise')
     parser.add_argument('--seconds', default = 0.5, type = float,
@@ -88,7 +92,7 @@ def cstore_analyze():
         # Open the input with just some default values (don't matter)
         cstore = CStoreBase(args.input, mode = 'r',
                             gain        = args.gain,
-                            sinc        = None,
+                            sinc        = args.sinc,
                             baud        = 300,
                             freq0       = 1200,
                             freq1       = 2400,
@@ -112,7 +116,7 @@ def cstore_analyze():
 # ----
 def _cstore_save(handler, args):
     # Open the input (file or sound-card)
-    with handler(args.input, 'r') as cstore:
+    with handler(args.input, 'r', gain = args.gain, sinc = args.sinc) as cstore:
         # Get the raw data as a bytearray, stop at the first EOF (0xff)
         data = deque()
         data.extend(cstore.bytes)
