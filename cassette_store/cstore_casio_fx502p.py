@@ -20,7 +20,8 @@ from cassette_store.cstore_base import *
 #   one-stopbits.
 # ----
 class CStoreCasioFX502P(CStoreBase):
-    def __init__(self, fname = None, mode = 'r', gain = None, sinc = None):
+    def __init__(self, fname = None, mode = 'r', gain = None, sinc = None,
+                 debug = False):
         # Build the text->byte token table by reversing the byte->text one
         self.TOKENS_T2B = {self.TOKENS_B2T[b].upper(): b
                            for b in self.TOKENS_B2T}
@@ -34,7 +35,8 @@ class CStoreCasioFX502P(CStoreBase):
                          baud       = 300,
                          databits   = 8,
                          parity     = CSTORE_PARITY_EVEN,
-                         stopbits   = 2)
+                         stopbits   = 2,
+                         debug      = debug)
 
         # If we are reading data (save mode), wait for a lead-in of
         # continuous 1-bits at least 0.5 seconds long

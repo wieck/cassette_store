@@ -34,6 +34,8 @@ def main():
                         help = 'write result to OUTPUT')
     parser.add_argument('-b', '--binary', action = 'store_true',
                         help = 'read/write binary data')
+    parser.add_argument('-d', '--debug', action = 'store_true',
+                        help = 'enable debugging output')
     parser.add_argument('--gain', default = None, type = int,
                         help = 'apply GAIN db')
     parser.add_argument('--sinc', default = None,
@@ -116,7 +118,8 @@ def cstore_analyze():
 # ----
 def _cstore_save(handler, args):
     # Open the input (file or sound-card)
-    with handler(args.input, 'r', gain = args.gain, sinc = args.sinc) as cstore:
+    with handler(args.input, 'r', gain = args.gain, sinc = args.sinc,
+                 debug = args.debug) as cstore:
         # Get the raw data as a bytearray, stop at the first EOF (0xff)
         data = deque()
         data.extend(cstore.bytes)
@@ -145,7 +148,7 @@ def _cstore_save(handler, args):
 # ----
 def _cstore_load(handler, args):
     # Open the output (file or sound-card)
-    with handler(args.output, 'w') as cstore:
+    with handler(args.output, 'w', debug = args.debug) as cstore:
         # Get the raw data bytes to sent to the calculator
         if args.input is None:
             if args.binary:

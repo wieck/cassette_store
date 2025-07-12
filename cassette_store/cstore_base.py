@@ -39,7 +39,7 @@ class CStoreException(Exception):
 # ----
 class CStoreBase:
     def __init__(self, fname, mode, gain, sinc, basefreq, baud,
-                 databits, parity, stopbits):
+                 databits, parity, stopbits, debug = False):
         self.fname      = fname
         self.mode       = mode
         self.gain       = gain
@@ -49,16 +49,25 @@ class CStoreBase:
         self.databits   = databits
         self.parity     = parity
         self.stopbits   = stopbits
+        self.debug      = debug
 
         # Determine the used bitmasks from the number of databits and parity
         self.bitmasks = [1 << n for n in range(0, self.databits)]
         if self.parity is not None:
             self.bitmasks += [0]
 
-        # Generate frame arrays for zero and one bits
+        # Generate frame arrays for zero and one bits depending on the
+        # base frequency and baud.
         fphw = int(CSTORE_SOX_RATE / basefreq / 2)
-        self.frames0 = ([0x80] * fphw * 2 + [0x00] * fphw * 2) * 4
-        self.frames1 = ([0x80] * fphw + [0x00] * fphw) * 8
+        len_0 = int(self.origfreq / self.baud / 2)
+        len_1 = int(len_0 * 2)
+        self.frames0 = ([120] * fphw * 2 + [-120 & 0xff] * fphw * 2) * len_0
+        self.frames1 = ([120] * fphw + [-120 & 0xff] * fphw) * len_1
+
+        if debug:
+            print("bitmasks:", self.bitmasks)
+            print("frames0: ", self.frames0)
+            print("frames1: ", self.frames1)
 
         if mode == 'r':
             # This is 'save' mode, reading from the calculator
@@ -256,6 +265,11 @@ class CStoreBase:
                 sample.extend(islice(self.bits, numbits - 1))
 
                 # Return the byte we just produced.
+                if self.debug:
+                    char = chr(byteval)
+                    if not char.isprintable() or char in ['\n', '\r', '\b']:
+                        char = '.'
+                    print("{0:02x} '{1}'".format(byteval, char))
                 yield byteval
 
     def _wait_for_leadin(self, basefreq, duration = 0.5):
