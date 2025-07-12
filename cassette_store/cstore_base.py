@@ -55,6 +55,11 @@ class CStoreBase:
         if self.parity is not None:
             self.bitmasks += [0]
 
+        # Generate frame arrays for zero and one bits
+        fphw = int(CSTORE_SOX_RATE / basefreq / 2)
+        self.frames0 = ([0x80] * fphw * 2 + [0x00] * fphw * 2) * 4
+        self.frames1 = ([0x80] * fphw + [0x00] * fphw) * 8
+
         if mode == 'r':
             # This is 'save' mode, reading from the calculator
             if fname is None:
