@@ -272,22 +272,6 @@ class CStoreCasioFX502P(CStoreBase):
 
         return result
 
-    def _wait_for_start(self, byteseq):
-        # Wait for a valid FX502P start header. The start header consists
-        # of 0xBnnn for a program or 0xFnnn for memory data, but in reverse
-        # byte order and BCD encoded. So a program with header number 123
-        # will be represented as 0x23, 0xB1.
-        sample = deque(maxlen = 2)
-        sample.extend(islice(byteseq, 1))
-
-        for byte in byteseq:
-            sample.append(byte)
-            start = "{0:02X}{1:02X}".format(sample[1], sample[0])
-            m = re.match('^[BF]\d\d\d', start)
-            if m is not None:
-                return start, bytes(sample)
-        raise CStoreException("no valid start sequence found")
-
     # The order in which memories are saved
     MEMORY_SEQ = [
         'MF', 'M9', 'M8', 'M7', 'M6', 'M5',
