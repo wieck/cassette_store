@@ -26,7 +26,7 @@ available:
 
 ```
 $ cstore --help
-usage: cstore [-h] [-i INPUT] [-o OUTPUT] [-b] [--gain GAIN]
+usage: cstore [-h] [-i INPUT] [-o OUTPUT] [-b] [--gain GAIN] [--sinc SINC]
               {fx502p} {save,load}
 
 save/load cassette tape programs and data like the Kansas City Standard audio
@@ -44,6 +44,7 @@ optional arguments:
                         write result to OUTPUT
   -b, --binary          read/write binary data
   --gain GAIN           apply GAIN db
+  --sinc SINC           apply SINC bandpass filter
 ```
 
 The help could mention that
