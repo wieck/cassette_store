@@ -107,7 +107,7 @@ class CStoreBase:
             self.soxpipe = io.BufferedReader(self.soxproc.stdout)
 
             # Create the generator for sign-bit-changes
-            self.sbc    = self._sbc_generator()
+            self.sbc    = self._read_sbc_generator()
 
             # Wait for the lead-in and determine the actual basefreq from that
             self._wait_for_leadin(basefreq, 0.5)
@@ -119,9 +119,9 @@ class CStoreBase:
                                   + 0.5)
 
             # Create all the generators needed
-            self.hw         = self._hw_generator()
-            self.bits       = self._bit_generator()
-            self.allbytes   = self._byte_generator()
+            self.hw         = self._read_hw_generator()
+            self.bits       = self._read_bit_generator()
+            self.allbytes   = self._read_byte_generator()
         elif mode == 'w':
             # This is 'load' mode, writing to the calculator or a sound-file
             if fname is None:
@@ -176,7 +176,7 @@ class CStoreBase:
     # audio signal's amplitude flips from positive to negative or vice versa,
     # emit a 1. Otherwise emit a 0. This lets higher functions determine
     # the current frequency.
-    def _sbc_generator(self):
+    def _read_sbc_generator(self):
         last_sign = 0
 
         while True:
@@ -192,9 +192,9 @@ class CStoreBase:
                 last_sign = sign
 
     # Generator emitting a '#' for a ZERO frequency halfwave and a '.' for
-    # a ONE frequency halfwave. The _bit_generator() is using this to output
-    # a bit stream.
-    def _hw_generator(self):
+    # a ONE frequency halfwave. The _read_bit_generator() is using this to
+    # output a bit stream.
+    def _read_hw_generator(self):
         n = 0
         for s in self.sbc:
             n += 1
@@ -203,7 +203,7 @@ class CStoreBase:
                 n = 0
 
     # Generate a stream of decoded bits
-    def _bit_generator(self):
+    def _read_bit_generator(self):
         # From the originally requested basefreq and the baud we can
         # determine the lengths of the zero and one patterns.
         len_1 = int(self.origfreq / self.baud * 2)
@@ -227,7 +227,7 @@ class CStoreBase:
                 sample.extend(islice(self.hw, len_1 - 1))
 
     # Generate a stream of decoded bytes
-    def _byte_generator(self):
+    def _read_byte_generator(self):
         # Calculate the number of meaningful bits (without stopbits)
         numbits = 1 + self.databits
         if self.parity != CSTORE_PARITY_NONE:
