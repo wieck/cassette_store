@@ -65,9 +65,9 @@ class CStoreBase:
         self.frames1 = ([120] * fphw + [-120 & 0xff] * fphw) * len_1
 
         if debug:
-            print("bitmasks:", self.bitmasks)
-            print("frames0: ", self.frames0)
-            print("frames1: ", self.frames1)
+            print("DBG: bitmasks:", self.bitmasks)
+            print("DBG: frames0: ", self.frames0)
+            print("DBG: frames1: ", self.frames1)
 
         if mode == 'r':
             # This is 'save' mode, reading from the calculator
@@ -151,6 +151,8 @@ class CStoreBase:
                     cmd += ['sinc', str(sinc)]
 
             # Launch the sox(1) process
+            if self.debug:
+                print("DBG: sox cmd =", cmd)
             self.soxproc = subprocess.Popen(cmd, stdin = subprocess.PIPE,
                                             text = False)
             self.soxpipe = io.BufferedWriter(self.soxproc.stdin)
@@ -166,7 +168,13 @@ class CStoreBase:
     # Shutdown input or output
     def close(self):
         if self.soxproc is not None:
-            self.soxproc.kill()
+            if self.mode == 'w':
+                if self.debug:
+                    print("DBG: flushing output")
+                self.soxproc.stdin.flush()
+                self.soxproc.stdin.close()
+            else:
+                self.soxproc.kill()
             self.soxproc.wait()
             self.soxproc = None
             self.soxpipe = None
@@ -269,7 +277,7 @@ class CStoreBase:
                     char = chr(byteval)
                     if not char.isprintable() or char in ['\n', '\r', '\b']:
                         char = '.'
-                    print("{0:02x} '{1}'".format(byteval, char))
+                    print("DBG: {0:02x} '{1}'".format(byteval, char))
                 yield byteval
 
     def _wait_for_leadin(self, basefreq, duration = 0.5):
@@ -310,7 +318,9 @@ class CStoreBase:
         frames = deque()
 
         for b in data:
-            # Add a zero-startbit
+            if self.debug:
+                print("DBG: writing byte {0:02x}".format(b))
+            # Generate a zero-startbit
             frames.extend(self.frames0)
             nbits = 0
             for mask in self.bitmasks:
