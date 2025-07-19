@@ -171,3 +171,4 @@ def _cstore_load(handler, args):
 
         # Send the data to the calculator as audio
         cstore.write(data)
+        cstore.close()
