@@ -296,13 +296,15 @@ class CStoreBase:
                 # eliminate any early junk, then measure the actual basefreq.
                 sample.extend(islice(self.sbc, int(CSTORE_SOX_RATE / 5 - 1)))
                 self.basefreq = int(sum(sample) / duration / 2)
+                if self.debug:
+                    print("DBG: detected basefreq =", self.basefreq)
                 return True
 
             # If not found yet we just move ahead by 100ms so we don't
             # have to do the above for every single audio frame.
             sample.extend(islice(self.sbc, int(CSTORE_SOX_RATE / 10 - 1)))
         
-        return False
+        raise CStoreException("no carrier signal detected")
 
     # Write raw frame data to the output (sound-card or sound-file)
     def _write_frames(self, frames):
