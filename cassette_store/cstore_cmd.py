@@ -44,18 +44,26 @@ def main():
     args = parser.parse_args(sys.argv[1:])
 
     # ----
-    # Pick the requested protocol handler class
-    # ----
-    if args.protocol == 'fx502p':
-        handler = CStoreCasioFX502P
+    # Catch expected exceptions
+    try:
+        # ----
+        # Pick the requested protocol handler class
+        # ----
+        if args.protocol == 'fx502p':
+            handler = CStoreCasioFX502P
+        elif args.protocol == 'pc1211':
+            handler = CStoreSharpPC1211
 
-    # ----
-    # Perform the requested action
-    # ----
-    if args.action == 'save':
-        _cstore_save(handler, args)
-    elif args.action == 'load':
-        _cstore_load(handler, args)
+        # ----
+        # Perform the requested action
+        # ----
+        if args.action == 'save':
+            _cstore_save(handler, args)
+        elif args.action == 'load':
+            _cstore_load(handler, args)
+    except CStoreException as ex:
+        print("ERROR:", str(ex), file = sys.stderr)
+        sys.exit(1)
 
 # ----
 # save action - Calculator is sending audio and cstore is saving it
