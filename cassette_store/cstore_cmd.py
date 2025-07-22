@@ -58,62 +58,6 @@ def main():
         _cstore_load(handler, args)
 
 # ----
-# Entry point for cstore-analyze(1)
-# ----
-def cstore_analyze():
-    # ----
-    # Parse command line
-    # ----
-    parser = argparse.ArgumentParser(
-            prog = 'cstore-analyze',
-            description = """tool commands to analyze cassette-tape audio
-                    protocols
-                    """
-        )
-    parser.add_argument('action', choices = ['basefreq',],
-                        help = 'action to perform')
-    parser.add_argument('-i', '--input', default = None,
-                        help = 'read audio from INPUT (soundcard)')
-    parser.add_argument('--gain', default = None, type = int,
-                        help = 'apply GAIN db')
-    parser.add_argument('--sinc', default = None,
-                        help = 'apply SINC bandpass filter')
-    parser.add_argument('--skip', default = 0.0, type = float,
-                        help = 'skip over SKIP seconds of noise')
-    parser.add_argument('--seconds', default = 0.5, type = float,
-                        help = 'sample SECONDS of audio (default 0.5s)')
-
-    args = parser.parse_args(sys.argv[1:])
-
-    if args.action == 'basefreq':
-        # Determine the base frequency. Most protocols have a lead-in
-        # consisting of one-bits for about 3+ seconds. Simply counting
-        # the sign-bit-changes in any interval will yield the frequency
-        # of a one-bit, which is usually the base frequency.
-
-        # Open the input with just some default values (don't matter)
-        cstore = CStoreBase(args.input, mode = 'r',
-                            gain        = args.gain,
-                            sinc        = args.sinc,
-                            baud        = 300,
-                            freq0       = 1200,
-                            freq1       = 2400,
-                            parity      = CSTORE_PARITY_NONE,
-                            databits    = 8,
-                            stopbits    = 1)
-
-        # Skip the requested number of seconds to get over recorded noise
-        nskip = int(CSTORE_SOX_RATE * args.skip)
-        islice(cstore.sbc, nskip)
-
-        # Read the requested number of sign-bit-change frames and calculate
-        # the frequency from that sample.
-        nframes = int(CSTORE_SOX_RATE * args.seconds)
-        sample = deque()
-        sample.extend(islice(cstore.sbc, nframes))
-        print(int(sum(sample) / 2 / args.seconds))
-
-# ----
 # save action - Calculator is sending audio and cstore is saving it
 # ----
 def _cstore_save(handler, args):

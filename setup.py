@@ -12,7 +12,6 @@ setup(
     entry_points = {
         'console_scripts': [
             'cstore = cassette_store.cstore_cmd:main',
-            'cstore-analyze = cassette_store.cstore_cmd:cstore_analyze',
         ]
     }
 )
