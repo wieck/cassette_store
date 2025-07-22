@@ -36,7 +36,7 @@ def main():
                         help = 'read/write binary data')
     parser.add_argument('-d', '--debug', action = 'store_true',
                         help = 'enable debugging output')
-    parser.add_argument('--gain', default = None, type = int,
+    parser.add_argument('--gain', default = None, type = float,
                         help = 'apply GAIN db')
     parser.add_argument('--sinc', default = None,
                         help = 'apply SINC bandpass filter')
