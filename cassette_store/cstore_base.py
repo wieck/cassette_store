@@ -120,8 +120,14 @@ class CStoreBase:
 
             # Create all the generators needed
             self.hw         = self._read_hw_generator()
+            self.startbit   = self._read_startbit_generator()
             self.bits       = self._read_bit_generator()
             self.allbytes   = self._read_byte_generator()
+
+            # Set up the half-wave sample buffer for the _read_hw_generator
+            self.hwlen_0    = int(self.origfreq / self.baud)
+            self.hwlen_1    = self.hwlen_0 * 2
+            self.hwbuffer   = deque(maxlen = self.hwlen_1)
         elif mode == 'w':
             # This is 'load' mode, writing to the calculator or a sound-file
             if fname is None:
@@ -188,12 +194,15 @@ class CStoreBase:
         last_sign = 0
 
         while True:
+            # Read the next chunk of binary frames from the sound input
+            # and turn it into a bytearray.
             frames = self.soxpipe.read(8192)
             if not frames:
                 break
-
             sbytes = bytearray(frames)
 
+            # Produce a 1 for every time the sign of the frame changes,
+            # and a 0 otherwise.
             for byte in sbytes:
                 sign = byte & 0x80
                 yield 1 if (sign != last_sign) else 0
@@ -203,82 +212,106 @@ class CStoreBase:
     # a ONE frequency halfwave. The _read_bit_generator() is using this to
     # output a bit stream.
     def _read_hw_generator(self):
+        # Measure the number of frames from 1 to the next 1.
         n = 0
         for s in self.sbc:
             n += 1
             if s != 0 and n > 2:
+                # If the number of frames is below the threshold this is
+                # a ZERO halfwave, otherwise a ONE halfwave.
                 yield '.' if n <= self.hwmidpoint else '#'
                 n = 0
 
-    # Generate a stream of decoded bits
-    def _read_bit_generator(self):
-        # From the originally requested basefreq and the baud we can
-        # determine the lengths of the zero and one patterns.
-        len_1 = int(self.origfreq / self.baud * 2)
-        len_0 = int(len_1 / 2)
-        pattern_1 = '.' * len_1
-        pattern_0 = '#' * len_0
+    def _read_startbit_generator(self):
+        # Calculate how many halfwaves to skip once we found
+        # a full wave of the ZERO frequency
+        skip = self.hwlen_0 - 2
 
-        # Scan the incoming halfwaves for those patterns
-        sample = deque(maxlen = len_1)
-        sample.extend(islice(self.hw, len_1 - 1))
+        # Fill the sample buffer with enought samples for each pattern.
+        # The startbit generator is called before the bit generator,
+        # so this is where it needs to happen.
+        self.hwbuffer.extend(islice(self.hw, self.hwlen_1))
 
+        # Process halfwave patterns.
         for hw in self.hw:
-            sample.append(hw)
-            if ''.join(sample)[0:len_0] == pattern_0:
-                # Got a ZERO pattern
-                yield 0
-                sample.extend(islice(self.hw, len_0 - 1))
-            elif ''.join(sample) == pattern_1:
-                # Got a ONE pattern
-                yield 1
-                sample.extend(islice(self.hw, len_1 - 1))
+            # Wait for at least a single ONE frequency full wave. That is
+            # two consecutive '.'.
+            self.hwbuffer.append(hw)
+            if self.hwbuffer[0] == '.' and self.hwbuffer[1] == '.':
+                # Now wait for a ZERO wave and consume the remaining
+                # halfwaves for that.
+                # While at it count the number of idle ONE halfwaves we
+                # are skipping over for debug purposes.
+                lead = 2
+                for hw in self.hw:
+                    lead += 1
+                    self.hwbuffer.append(hw)
+                    if self.hwbuffer[0] == '#' and self.hwbuffer[1] == '#':
+                        if self.debug:
+                            # Report lead/idle time
+                            if lead > int(self.stopbits * self.hwlen_1 * 1.5):
+                                print("DBG: lead of", lead, "frames")
+                            print("DBG: START from", ''.join(self.hwbuffer))
+                        self.hwbuffer.extend(islice(self.hw, self.hwlen_0))
 
-    # Generate a stream of decoded bytes
-    def _read_byte_generator(self):
-        # Calculate the number of meaningful bits (without stopbits)
-        numbits = 1 + self.databits
-        if self.parity != CSTORE_PARITY_NONE:
-            numbits += 1
+                        # Return the ZERO startbit and wait for the
+                        # next call.
+                        yield 0
+                        break
 
-        # Setup a sample buffer including the stopbits
-        sample = deque(maxlen = numbits + self.stopbits)
-        sample.extend(islice(self.bits, numbits + self.stopbits - 1))
-
-        # Now process bits into bytes
-        for b in self.bits:
-            # First we scan for a ZERO startbit
-            sample.append(b)
-            if sample[0] == 0:
-                # Got the startbit, now we consume the requested number of
-                # databits and parity. Count ONES while doing so.
-                byteval = 0
-                i = 1
-                nones = 0
-                for m in self.bitmasks:
-                    if m != 0:
-                        # This is a data bit, if set add it to the byteval.
-                        if sample[i]:
-                            byteval |= m
-                            nones += 1
-                    else:
-                        # This is the parity bit, check it. Note: the
-                        # class initialization adds a zero mask to the
-                        # bitmasks if there is a parity.
-                        if sample[i] != (nones + self.parity) % 2:
-                            raise CStoreException("parity error")
-                    i += 1
-                # Skip ahead on the input bits so that the stopbits are
-                # next in the sample processing.
-                sample.extend(islice(self.bits, numbits - 1))
-
-                # Return the byte we just produced.
+    # Generate a stream of decoded bits. This is only called from
+    # higher generators after a startbit has been detected and we
+    # are synchronized on a bit-boundary. So we can simply scan
+    # a sufficient number of frames and look at the frequency detected
+    # in the middle of them.
+    def _read_bit_generator(self):
+        while True:
+            if self.hwbuffer[int(self.hwlen_0 / 2)] == '#':
                 if self.debug:
-                    char = chr(byteval)
-                    if not char.isprintable() or char in ['\n', '\r', '\b']:
-                        char = '.'
-                    print("DBG: {0:02x} '{1}'".format(byteval, char))
-                yield byteval
+                    print("ZERO  from", ''.join(self.hwbuffer))
+                self.hwbuffer.extend(islice(self.hw, self.hwlen_0))
+                yield 0
+            elif self.hwbuffer[int(self.hwlen_1 / 2)] == '.':
+                if self.debug:
+                    print("ONE   from", ''.join(self.hwbuffer))
+                self.hwbuffer.extend(islice(self.hw, self.hwlen_1))
+                yield 1
+            else:
+                raise CStoreException("could not determine bit from " +
+                                      "".join(map(str, self.hwbuffer)))
+
+
+    # Generate a stream of decoded bytes.
+    #
+    # This generator is suitable for protocols that just have a
+    # startbit, a number of databits, an optional parity and one
+    # or more stopbits.
+    def _read_byte_generator(self):
+        try:
+            while True:
+                    # Get a startbit
+                    b = next(self.startbit)
+
+                    byteval = 0
+                    num_one = 0
+                    for mask in self.bitmasks:
+                        b = next(self.bits)
+                        if mask != 0:
+                            if b:
+                                byteval |= mask
+                                num_one += 1
+                        else:
+                            pass
+
+                    # Return the byte we just produced.
+                    if self.debug:
+                        char = chr(byteval)
+                        if not char.isprintable() or char in ['\n','\r','\b']:
+                            char = '.'
+                        print("DBG: {0:02x} '{1}'".format(byteval, char))
+                    yield byteval
+        except StopIteration:
+            pass
 
     def _wait_for_leadin(self, basefreq, duration = 0.5):
         # We create a sample buffer the size of number of audio frames
@@ -303,7 +336,7 @@ class CStoreBase:
             # If not found yet we just move ahead by 100ms so we don't
             # have to do the above for every single audio frame.
             sample.extend(islice(self.sbc, int(CSTORE_SOX_RATE / 10 - 1)))
-        
+
         raise CStoreException("no carrier signal detected")
 
     # Write raw frame data to the output (sound-card or sound-file)
