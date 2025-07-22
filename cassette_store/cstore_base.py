@@ -268,12 +268,12 @@ class CStoreBase:
         while True:
             if self.hwbuffer[int(self.hwlen_0 / 2)] == '#':
                 if self.debug:
-                    print("ZERO  from", ''.join(self.hwbuffer))
+                    print("DBG: ZERO  from", ''.join(self.hwbuffer))
                 self.hwbuffer.extend(islice(self.hw, self.hwlen_0))
                 yield 0
             elif self.hwbuffer[int(self.hwlen_1 / 2)] == '.':
                 if self.debug:
-                    print("ONE   from", ''.join(self.hwbuffer))
+                    print("DBG: ONE   from", ''.join(self.hwbuffer))
                 self.hwbuffer.extend(islice(self.hw, self.hwlen_1))
                 yield 1
             else:
