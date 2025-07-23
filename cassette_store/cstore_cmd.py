@@ -34,7 +34,7 @@ def main():
                         help = 'write result to OUTPUT')
     parser.add_argument('-b', '--binary', action = 'store_true',
                         help = 'read/write binary data')
-    parser.add_argument('-d', '--debug', action = 'store_true',
+    parser.add_argument('-d', '--debug', action = 'count', default = 0,
                         help = 'enable debugging output')
     parser.add_argument('--gain', default = None, type = float,
                         help = 'apply GAIN db')

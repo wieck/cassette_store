@@ -39,7 +39,7 @@ class CStoreException(Exception):
 # ----
 class CStoreBase:
     def __init__(self, fname, mode, gain, sinc, basefreq, baud,
-                 databits, parity, stopbits, debug = False):
+                 databits, parity, stopbits, debug = 0):
         self.fname      = fname
         self.mode       = mode
         self.gain       = gain
@@ -50,6 +50,9 @@ class CStoreBase:
         self.parity     = parity
         self.stopbits   = stopbits
         self.debug      = debug
+
+        if debug:
+            print("DBG: debug level", debug)
 
         # Determine the used bitmasks from the number of databits and parity
         self.bitmasks = [1 << n for n in range(0, self.databits)]
@@ -157,7 +160,7 @@ class CStoreBase:
                     cmd += ['sinc', str(sinc)]
 
             # Launch the sox(1) process
-            if self.debug:
+            if self.debug >= 1:
                 print("DBG: sox cmd =", cmd)
             self.soxproc = subprocess.Popen(cmd, stdin = subprocess.PIPE,
                                             text = False)
@@ -175,7 +178,7 @@ class CStoreBase:
     def close(self):
         if self.soxproc is not None:
             if self.mode == 'w':
-                if self.debug:
+                if self.debug >= 1:
                     print("DBG: flushing output")
                 self.soxproc.stdin.flush()
                 self.soxproc.stdin.close()
@@ -233,31 +236,39 @@ class CStoreBase:
         self.hwbuffer.extend(islice(self.hw, self.hwlen_1))
 
         # Process halfwave patterns.
-        for hw in self.hw:
+        while True:
             # Wait for at least a single ONE frequency full wave. That is
             # two consecutive '.'.
-            self.hwbuffer.append(hw)
-            if self.hwbuffer[0] == '.' and self.hwbuffer[1] == '.':
-                # Now wait for a ZERO wave and consume the remaining
-                # halfwaves for that.
-                # While at it count the number of idle ONE halfwaves we
-                # are skipping over for debug purposes.
-                lead = 2
-                for hw in self.hw:
-                    lead += 1
-                    self.hwbuffer.append(hw)
-                    if self.hwbuffer[0] == '#' and self.hwbuffer[1] == '#':
-                        if self.debug:
-                            # Report lead/idle time
-                            if lead > int(self.stopbits * self.hwlen_1 * 1.5):
-                                print("DBG: lead of", lead, "frames")
-                            print("DBG: START from", ''.join(self.hwbuffer))
-                        self.hwbuffer.extend(islice(self.hw, self.hwlen_0))
+            if self.hwbuffer[0] != '.' or self.hwbuffer[1] != '.':
+                if self.debug >= 4:
+                    print("DBG: advance from", ''.join(self.hwbuffer))
+                self.hwbuffer.append(next(self.hw))
+                continue
 
-                        # Return the ZERO startbit and wait for the
-                        # next call.
-                        yield 0
-                        break
+            # Now wait for at least two ZERO waves and consume the remaining
+            # halfwaves for that.
+            # While at it count the number of idle ONE halfwaves we
+            # are skipping over for debug purposes.
+            lead = 2
+            for hw in self.hw:
+                lead += 1
+                self.hwbuffer.append(hw)
+                if self.debug >= 4:
+                    print("DBG: scanning for ZERO in", ''.join(self.hwbuffer))
+                if (self.hwbuffer[0] == '#' and self.hwbuffer[1] == '#' and
+                    self.hwbuffer[2] == '#' and self.hwbuffer[3] == '#'):
+                    if self.debug >= 3:
+                        # Report lead/idle time
+                        if lead > int(self.stopbits * self.hwlen_1 * 2.5):
+                            ms = lead / self.basefreq / 2.0 * 1000.0
+                            print("DBG: lead of {0:.2f}ms".format(ms))
+                        print("DBG: START from", ''.join(self.hwbuffer))
+                    self.hwbuffer.extend(islice(self.hw, self.hwlen_0))
+
+                    # Return the ZERO startbit and wait for the
+                    # next call.
+                    yield 0
+                    break
 
     # Generate a stream of decoded bits. This is only called from
     # higher generators after a startbit has been detected and we
@@ -267,12 +278,12 @@ class CStoreBase:
     def _read_bit_generator(self):
         while True:
             if self.hwbuffer[int(self.hwlen_0 / 2)] == '#':
-                if self.debug:
+                if self.debug >= 3:
                     print("DBG: ZERO  from", ''.join(self.hwbuffer))
                 self.hwbuffer.extend(islice(self.hw, self.hwlen_0))
                 yield 0
             elif self.hwbuffer[int(self.hwlen_1 / 2)] == '.':
-                if self.debug:
+                if self.debug >= 3:
                     print("DBG: ONE   from", ''.join(self.hwbuffer))
                 self.hwbuffer.extend(islice(self.hw, self.hwlen_1))
                 yield 1
@@ -304,7 +315,7 @@ class CStoreBase:
                             pass
 
                     # Return the byte we just produced.
-                    if self.debug:
+                    if self.debug >= 2:
                         char = chr(byteval)
                         if not char.isprintable() or char in ['\n','\r','\b']:
                             char = '.'
@@ -329,7 +340,7 @@ class CStoreBase:
                 # eliminate any early junk, then measure the actual basefreq.
                 sample.extend(islice(self.sbc, int(CSTORE_SOX_RATE / 5 - 1)))
                 self.basefreq = int(sum(sample) / duration / 2)
-                if self.debug:
+                if self.debug >= 1:
                     print("DBG: detected basefreq =", self.basefreq)
                 return True
 
@@ -353,7 +364,7 @@ class CStoreBase:
         frames = deque()
 
         for b in data:
-            if self.debug:
+            if self.debug >= 2:
                 print("DBG: writing byte {0:02x}".format(b))
             # Generate a zero-startbit
             frames.extend(self.frames0)
