@@ -24,7 +24,7 @@ def main():
                     like the Kansas City Standard audio protocol.
                     """
         )
-    parser.add_argument('protocol', choices = ['fx502p',],
+    parser.add_argument('protocol', choices = ['fx502p', 'pc1211',],
                         help = 'calculator protocol to use')
     parser.add_argument('action', choices = ['save', 'load'],
                         help = 'action to perform')
