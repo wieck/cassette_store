@@ -39,25 +39,18 @@ class CStoreException(Exception):
 # ----
 class CStoreBase:
     def __init__(self, fname, mode, gain, sinc, basefreq, baud,
-                 databits, parity, stopbits, debug = 0):
+                 bitpattern = 'S01234567E--', debug = 0):
         self.fname      = fname
         self.mode       = mode
         self.gain       = gain
         self.sinc       = sinc
         self.origfreq   = basefreq
         self.baud       = baud
-        self.databits   = databits
-        self.parity     = parity
-        self.stopbits   = stopbits
+        self.bitpattern = bitpattern
         self.debug      = debug
 
         if debug:
             print("DBG: debug level", debug)
-
-        # Determine the used bitmasks from the number of databits and parity
-        self.bitmasks = [1 << n for n in range(0, self.databits)]
-        if self.parity is not None:
-            self.bitmasks += [0]
 
         # Generate frame arrays for zero and one bits depending on the
         # base frequency and baud.
@@ -66,11 +59,6 @@ class CStoreBase:
         len_1 = int(len_0 * 2)
         self.frames0 = ([120] * fphw * 2 + [-120 & 0xff] * fphw * 2) * len_0
         self.frames1 = ([120] * fphw + [-120 & 0xff] * fphw) * len_1
-
-        if debug:
-            print("DBG: bitmasks:", self.bitmasks)
-            print("DBG: frames0: ", self.frames0)
-            print("DBG: frames1: ", self.frames1)
 
         if mode == 'r':
             # This is 'save' mode, reading from the calculator
@@ -259,7 +247,7 @@ class CStoreBase:
                     self.hwbuffer[2] == '#' and self.hwbuffer[3] == '#'):
                     if self.debug >= 3:
                         # Report lead/idle time
-                        if lead > int(self.stopbits * self.hwlen_1 * 2.5):
+                        if lead > int(5 * self.hwlen_1 * 2.5):
                             ms = lead / self.basefreq / 2.0 * 1000.0
                             print("DBG: lead of {0:.2f}ms".format(ms))
                         print("DBG: START from", ''.join(self.hwbuffer))
@@ -293,34 +281,36 @@ class CStoreBase:
 
 
     # Generate a stream of decoded bytes.
-    #
-    # This generator is suitable for protocols that just have a
-    # startbit, a number of databits, an optional parity and one
-    # or more stopbits.
     def _read_byte_generator(self):
         try:
             while True:
-                    # Get a startbit
-                    b = next(self.startbit)
-
-                    byteval = 0
-                    num_one = 0
-                    for mask in self.bitmasks:
+                byteval = 0
+                num_one = 0
+                for state in self.bitpattern:
+                    if state in ['0', '1', '2', '3', '4', '5', '6', '7']:
+                        if next(self.bits):
+                            byteval |= (1 << int(state))
+                            num_one += 1
+                    elif state == 'S':
+                        next(self.startbit)
+                    elif state == 'E':
                         b = next(self.bits)
-                        if mask != 0:
-                            if b:
-                                byteval |= mask
-                                num_one += 1
-                        else:
-                            pass
+                        if (num_one % 2) != b:
+                            raise CStoreException("parity error")
+                    elif state == 'O':
+                        b = next(self.bits)
+                        if (num_one % 2) == b:
+                            raise CStoreException("parity error")
+                    elif state == '-':
+                        pass
 
-                    # Return the byte we just produced.
-                    if self.debug >= 2:
-                        char = chr(byteval)
-                        if not char.isprintable() or char in ['\n','\r','\b']:
-                            char = '.'
-                        print("DBG: {0:02x} '{1}'".format(byteval, char))
-                    yield byteval
+                # Generate the byte we just decoded.
+                if self.debug >= 2:
+                    char = chr(byteval)
+                    if not char.isprintable() or char in ['\n','\r','\b']:
+                        char = '.'
+                    print("DBG: {0:02x} '{1}'".format(byteval, char))
+                yield byteval
         except StopIteration:
             pass
 
@@ -360,33 +350,39 @@ class CStoreBase:
         self._write_frames(bytes(self.frames1 * numwaves))
 
     # Encode data bytes as configured
-    def _write_bytes(self, data):
+    def _write_byte(self, b):
         frames = deque()
 
-        for b in data:
-            if self.debug >= 2:
-                print("DBG: writing byte {0:02x}".format(b))
-            # Generate a zero-startbit
-            frames.extend(self.frames0)
-            nbits = 0
-            for mask in self.bitmasks:
-                # Add the requested number of databits and count the ones
-                if mask != 0:
-                    if b & mask:
-                        frames.extend(self.frames1)
-                        nbits += 1
-                    else:
-                        frames.extend(self.frames0)
+        if self.debug >= 2:
+            print("DBG: writing byte {0:02x}".format(b))
+        # Build the whole frame sequence and count one-bits
+        num_ones = 0
+        for state in self.bitpattern:
+            if state in ['0', '1', '2', '3', '4', '5', '6', '7']:
+                # Emit the databit
+                if b & (1 << int(state)):
+                    frames.extend(self.frames1)
+                    num_ones += 1
                 else:
-                    # If configured add the parity bit
-                    if nbits % 2 != self.parity:
-                        frames.extend(self.frames1)
-                    else:
-                        frames.extend(self.frames0)
-            # Add the one-stopbits
-            for i in range(self.stopbits):
+                    frames.extend(self.frames0)
+            elif state == 'S':
+                # Emit a sartbit
+                frames.extend(self.frames0)
+            elif state == 'E':
+                # Emit an EVEN paritybit
+                if (num_ones % 2) == 0:
+                    frames.extend(self.frames0)
+                else:
+                    frames.extend(self.frames1)
+            elif state == 'O':
+                # Emit an ODD paritybit
+                if (num_ones % 2) == 0:
+                    frames.extend(self.frames1)
+                else:
+                    frames.extend(self.frames0)
+            elif state == '-':
+                # Emit a stopbit
                 frames.extend(self.frames1)
 
-            # Push the audio frames to the putput
-            self._write_frames(bytes(frames))
-            frames.clear()
+        # Push the audio frames to the output
+        self._write_frames(bytes(frames))

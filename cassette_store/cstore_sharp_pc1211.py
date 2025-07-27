@@ -31,41 +31,13 @@ class CStoreSharpPC1211(CStoreBase):
                          sinc       = sinc,
                          basefreq   = 4000,
                          baud       = 500,
-                         databits   = 8,
-                         parity     = CSTORE_PARITY_NONE,
-                         stopbits   = 4,
+                         bitpattern = 'S4567----S0123-----',
                          debug      = debug)
 
         # If we are reading data (save mode), wait for a lead-in of
         # continuous 1-bits at least 0.5 seconds long
         if mode == 'r':
             self.bytes = self._read_bytes_until_eof()
-
-    def _read_byte_generator(self):
-        lower_masks = [0x01, 0x02, 0x04, 0x08]
-        upper_masks = [0x10, 0x20, 0x40, 0x80]
-
-        try:
-            while True:
-                # wait for a startbit
-                next(self.startbit)
-
-                byteval = 0x00
-
-                # scan the upper nibble
-                for mask in upper_masks:
-                    if next(self.bits):
-                        byteval |= mask
-
-                # wait for another startbit
-                next(self.startbit)
-
-                for mask in lower_masks:
-                    if next(self.bits):
-                        byteval |= mask
-                yield byteval
-        except StopIteration:
-            pass
 
     def _read_bytes_until_eof(self):
         # First byte must be the file type ident byte
@@ -85,7 +57,11 @@ class CStoreSharpPC1211(CStoreBase):
             chkcount += 1
 
             if ident == CSTORE_PC1211_PROG:
+                # The PC1211 emits a checksum byte every 8 bytes. This
+                # checksum adds the upper with an ADD and the lower
+                # nibble with ADDC to a virtual 8-bit accumulator.
                 if (chkcount % 9) == 0:
+                    # This is a checksum byte. Check it.
                     if self.debug >= 2:
                         print("DBG: {0:02x} {1:02x} ".format(b, chksum)
                               + "checksum")
@@ -97,10 +73,12 @@ class CStoreSharpPC1211(CStoreBase):
                         chksum = 0
                         chkcount = 0
                     else:
+                        # Every 80 bytes the checksum counters are reset
                         if chkcount == 90:
                             chksum = 0
                             chkcount = 0
                 else:
+                    # Regular data byte processing. Add up checksum.
                     chksum += (b & 0xf0) >> 4
                     if chksum > 0xff:
                         chksum = (chksum + 1) & 0xff
@@ -111,6 +89,9 @@ class CStoreSharpPC1211(CStoreBase):
                         if not char.isprintable() or char in ['\n', '\r', '\b']:
                             char = '.'
                         print("DBG: {0:02x} '{1}'".format(b, char))
+
+                    # Emit the data byte and stop after reading the
+                    # EOF marker.
                     yield b
                     if b == 0xf0:
                         break
@@ -171,41 +152,14 @@ class CStoreSharpPC1211(CStoreBase):
                 break
 
     def _write_byte(self, byteval, is_checksum = False):
-        lower_masks = [0x01, 0x02, 0x04, 0x08]
-        upper_masks = [0x10, 0x20, 0x40, 0x80]
-        frames = deque()
-        
-        # The startbit
-        frames.extend(self.frames0)
-        # The upper nibble
-        for mask in upper_masks:
-            if (byteval & mask) != 0:
-                frames.extend(self.frames1)
-            else:
-                frames.extend(self.frames0)
-        # N stopbits and another startbit
-        frames.extend(self.frames1 * self.stopbits)
-        frames.extend(self.frames0)
-        # The lower nibble
-        for mask in lower_masks:
-            if (byteval & mask) != 0:
-                frames.extend(self.frames1)
-            else:
-                frames.extend(self.frames0)
-
-        # N stopbits to finish the byte
-        frames.extend(self.frames1 * self.stopbits)
-
-        # output the audio data
-        self._write_frames(bytes(frames))
+        # Use our superclass to write the actual byte audio
+        super()._write_byte(byteval)
 
         # If this was a checksum we're done
         if is_checksum:
             return
 
-        # Output the actual byte and adjust checksum
-        if self.debug >= 2:
-            print("DBG: {0:02x}".format(byteval), "count", self.chkcount)
+        # Handle checksum
         self.chksum += (byteval & 0xf0) >> 4
         if self.chksum > 0xff:
             self.chksum += 1
@@ -216,7 +170,8 @@ class CStoreSharpPC1211(CStoreBase):
         if (self.chkcount % 8) == 0:
             if self.debug >= 2:
                 print("DBG: {0:02x} checksum".format(self.chksum))
-            self._write_byte(self.chksum, True)
+            super()._write_byte(self.chksum)
+            # Reset checksum and emit 4s ones every 80 bytes
             if self.chkcount == 80:
                 self._write_reset_chksum()
                 self._write_ones(4.0)
@@ -232,7 +187,7 @@ class CStoreSharpPC1211(CStoreBase):
         # The first 8-byte record (after the 0x80 ident) contains the
         # filename.
         fname = ""
-        for i in range(7, 1, -1):
+        for i in range(7, 0, -1):
             b = ((data[i] & 0xf0) >> 4) | ((data[i] & 0x0f) << 4)
             if b != 0x00:
                 fname += self._progbyte2token(b)

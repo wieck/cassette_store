@@ -33,9 +33,7 @@ class CStoreCasioFX502P(CStoreBase):
                          sinc       = sinc,
                          basefreq   = 2400,
                          baud       = 300,
-                         databits   = 8,
-                         parity     = CSTORE_PARITY_EVEN,
-                         stopbits   = 2,
+                         bitpattern = 'S01234567E--',
                          debug      = debug)
 
         # If we are reading data (save mode), wait for a lead-in of
@@ -54,10 +52,12 @@ class CStoreCasioFX502P(CStoreBase):
         self._write_ones(4.0)
 
         # Write the program/memory data itself
-        self._write_bytes(data)
+        for b in bytes(data):
+            self._write_byte(b)
 
         # Write 128 times EOF
-        self._write_bytes(bytes([0xff] * 128))
+        for i in range(128):
+            self._write_byte(0xff)
         
     def bytes2text(self, data):
         # Convert the first two bytes into the BCD encoded header bytes.
