@@ -1,0 +1,10 @@
+FP900
+P0:
+    GSB-P9 MR1 * MR18 - MR2 = / MR19 = Min5
+P1:
+    GSB-P9 MR1 * MR18 - MR5 * MR19 = Min2
+P2:
+    GSB-P9 MR5 * MR19 / MR18 = Min1
+P9:
+    ( MR4 / 1 0 0 + 1 ) X^Y MR3 = Min18 ( ( ( MR4 / 1 0 0 + 1 ) X^Y MR3 - 1
+    ) / ( MR4 / 1 0 0 ) ) = Min19
