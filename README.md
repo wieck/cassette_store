@@ -7,10 +7,9 @@ like the
 
 The project just started, so documentaion is lacking.
 
-- I have no idea how to make this work on Windows
-- The tool requires sox(1) to be installed (available on all Linux distros)
-- The only protocol implemented at this point is the CASIO FX-502P
-- The code is modular and more protocols are in development
+- I have no idea how to make this work on Windows.
+- The tool requires sox(1) to be installed (available on all Linux distros).
+- The code is modular and more protocols are in development.
 
 ### Installation
 
@@ -26,14 +25,15 @@ available:
 
 ```
 $ cstore --help
-usage: cstore [-h] [-i INPUT] [-o OUTPUT] [-b] [--gain GAIN] [--sinc SINC]
-              {fx502p} {save,load}
+usage: cstore [-h] [-i INPUT] [-o OUTPUT] [-b] [-d] [--gain GAIN]
+              [--sinc SINC]
+              {fx502p,pc1211} {save,load}
 
 save/load cassette tape programs and data like the Kansas City Standard audio
 protocol.
 
 positional arguments:
-  {fx502p}              calculator protocol to use
+  {fx502p,pc1211}       calculator protocol to use
   {save,load}           action to perform
 
 optional arguments:
@@ -43,6 +43,7 @@ optional arguments:
   -o OUTPUT, --output OUTPUT
                         write result to OUTPUT
   -b, --binary          read/write binary data
+  -d, --debug           enable debugging output (repeat for more verbosity)
   --gain GAIN           apply GAIN db
   --sinc SINC           apply SINC bandpass filter
 ```
@@ -52,31 +53,3 @@ The help could mention that
 - the default output for `save` is `stdout`
 - the default input for `load` is `stdin`
 - the default output for `load` is the active sound-card
-
-### Example
-
-This is decoding the CASIO Program Library Mathematics-8 example program,
-**Solving a cubic equation by the Newton method**.
-
-```
-$ cstore fx502p save -i fx502p-math-8.wav
-FP000
-P0:
-    HLT Min1 HLT Min2 HLT Min3 HLT Min4 HLT MinF
-  LBL1:
-    HLT Min5 HLT Min6
-  LBL2:
-    MR5 Min7 2 Min0
-  LBL3:
-    MR1 * MR5 X^2 * MR5 + MR2 * MR5 X^2 + MR3 * MR5 + MR4 = Min9 MR6 M+5 DSZ
-    GOTO4 GOTO5
-  LBL4:
-    MR9 Min8 GOTO3
-  LBL5:
-    ( MR9 - MR8 ) / MR6 = Min9 MR7 - MR8 / MR9 = Min8 - MR7 = ABS X>=F GOTO6
-    GOTO7
-  LBL6:
-    MR8 Min5 GOTO2
-  LBL7:
-    MR7 GOTO1
-```
