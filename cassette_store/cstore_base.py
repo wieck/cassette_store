@@ -168,6 +168,7 @@ class CStoreBase:
             if self.mode == 'w':
                 if self.debug >= 1:
                     print("DBG: flushing output")
+                self.soxpipe.flush()
                 self.soxproc.stdin.flush()
                 self.soxproc.stdin.close()
             else:
