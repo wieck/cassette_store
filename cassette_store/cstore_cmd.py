@@ -24,7 +24,8 @@ def main():
                     like the Kansas City Standard audio protocol.
                     """
         )
-    parser.add_argument('protocol', choices = ['fx502p', 'pc1211',],
+    parser.add_argument('protocol', choices = ['fx502p', 'pc1211',
+                            'pc1211-res',],
                         help = 'calculator protocol to use')
     parser.add_argument('action', choices = ['save', 'load'],
                         help = 'action to perform')
@@ -53,6 +54,8 @@ def main():
             handler = CStoreCasioFX502P
         elif args.protocol == 'pc1211':
             handler = CStoreSharpPC1211
+        elif args.protocol == 'pc1211-res':
+            handler = CStoreSharpPC1211Res
 
         # ----
         # Perform the requested action
