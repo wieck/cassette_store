@@ -15,8 +15,8 @@ The project just started, so documentaion is lacking.
 
 - Install sox(1) (via dnf or apt-get)
 - Clone this Git repository
-- Create and activate a Python3 virtual-env
-- Run `pip install -e .` inside the checked out Git repo
+- Create and activate a Python3 [virtual-env](https://docs.python.org/3/library/venv.html)
+- Run `pip install -e .` inside the checked out Git repo (don't miss the dot at the end)
 
 ### Usage
 
@@ -27,13 +27,14 @@ available:
 $ cstore --help
 usage: cstore [-h] [-i INPUT] [-o OUTPUT] [-b] [-d] [--gain GAIN]
               [--sinc SINC]
-              {fx502p,pc1211} {save,load}
+              {fx502p,pc1211,pc1211-res} {save,load}
 
 save/load cassette tape programs and data like the Kansas City Standard audio
 protocol.
 
 positional arguments:
-  {fx502p,pc1211}       calculator protocol to use
+  {fx502p,pc1211,pc1211-res}
+                        calculator protocol to use
   {save,load}           action to perform
 
 optional arguments:
@@ -43,7 +44,7 @@ optional arguments:
   -o OUTPUT, --output OUTPUT
                         write result to OUTPUT
   -b, --binary          read/write binary data
-  -d, --debug           enable debugging output (repeat for more verbosity)
+  -d, --debug           enable debugging output
   --gain GAIN           apply GAIN db
   --sinc SINC           apply SINC bandpass filter
 ```
