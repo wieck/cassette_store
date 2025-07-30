@@ -1,0 +1,7 @@
+RESERVED "RES1"
+A:SIN 
+S:COS 
+D:TAN 
+Z:ASN 
+X:ACS 
+C:ATN 
