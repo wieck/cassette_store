@@ -301,7 +301,8 @@ class CStoreSharpPC1211(CStoreBase):
                             else:
                                 raise CStoreException("unsupported string "
                                         + "character "
-                                        + "'{0}'".format(mm.group(1)))
+                                        + "'{0}'".format(mm.group(1))
+                                        + " in '" + s + "'")
                             s = mm.group(2)
                     line = m.group(2)
                     continue
@@ -377,6 +378,7 @@ class CStoreSharpPC1211(CStoreBase):
         0x47:   '7',
         0x48:   '8',
         0x49:   '9',
+        0x4a:   '.',
         0x4b:   '|E',
 
         0x51:   'A',
