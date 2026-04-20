@@ -265,6 +265,7 @@ class CStoreSharpPC1211(CStoreBase):
         re_string   = re.compile("(\"[^\"]*\")\s*(.*)")
         re_string_c = re.compile("(.)(.*)|(|E)(.*)")
         re_keyword  = re.compile("([A-Z][A-Z]+)\s*(.*)")
+        re_hex      = re.compile("(\[[0-9a-fA-F]+\])(.*)")
         re_special  = re.compile("(\|E|>=|<=|<>)(.*)")
         re_char     = re.compile("([^\s])\s*(.*)")
 
@@ -307,6 +308,16 @@ class CStoreSharpPC1211(CStoreBase):
                     line = m.group(2)
                     continue
                 
+                # Match HEX representation
+                # print("checking '" + line + "'", file = sys.stderr)
+                m = re_hex.match(line)
+                if m:
+                    val = int(m.group(1)[1:-1], 16)
+                    # raise Exception("got {0} = {1}".format(m.group(1), val))
+                    data.append(val)
+                    line = m.group(2)
+                    continue
+
                 # Special characters, like |E (for the exponent part of a
                 # number.
                 m = re_special.match(line)
