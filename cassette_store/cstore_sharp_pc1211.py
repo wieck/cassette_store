@@ -265,7 +265,7 @@ class CStoreSharpPC1211(CStoreBase):
         re_string   = re.compile("(\"[^\"]*\")\s*(.*)")
         re_string_c = re.compile("(.)(.*)|(|E)(.*)")
         re_keyword  = re.compile("([A-Z][A-Z]+)\s*(.*)")
-        re_special  = re.compile("(\|E)(.*)")
+        re_special  = re.compile("(\|E|>=|<=|<>)(.*)")
         re_char     = re.compile("([^\s])\s*(.*)")
 
         for line in lines:
@@ -407,6 +407,10 @@ class CStoreSharpPC1211(CStoreBase):
         0x68:   'X',
         0x69:   'Y',
         0x6a:   'Z',
+
+        0x82:   '>=',
+        0x83:   '<=',
+        0x84:   '<>',
 
         0x91:   'STEP ',
         0x92:   'THEN ',
