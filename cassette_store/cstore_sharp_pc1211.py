@@ -213,7 +213,7 @@ class CStoreSharpPC1211(CStoreBase):
             # Lines end with a 0x00
             while linedata[0] != 0x00:
                 text += self._progbyte2token(linedata.popleft())
-            text += '\n'
+            text = text.rstrip() + '\n'
             linedata.popleft()
         
         return text
